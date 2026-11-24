@@ -12548,12 +12548,49 @@
             cameras: xr,
           },
         };
+      // Dimensions of the Quaternius mesh, in the game's rear-axle coordinates.
+      vehicles.SportsCar = {
+        ...vehicles.Roadster,
+        name: "Sports Car",
+        bodyObj: { default: i.p + "static/media/quaternius-sports-car-body.obj" },
+        wheelObj: { default: i.p + "static/media/quaternius-sports-car-wheels.obj" },
+        map: null,
+        skins: null,
+        individualWheels: !0,
+        wheels: {
+          tyreWidth: 0.09,
+          width: 1.450086,
+          length: 2.506684,
+          radius: 0.280394,
+          circumference: 2 * Math.PI * 0.280394,
+          travel: 0.045,
+        },
+        metrics: {
+          ...vehicles.Roadster.metrics,
+          axleHeight: 0.280394,
+          mass: 1150,
+          accel: 11,
+          topSpeed: 62,
+          headlightPos: { x: 0.52, y: 0.52, z: 3.07 },
+        },
+        cameras: {
+          Chase: { ...xr.Chase, posOffset: [0, 0, 1.25] },
+          ChaseFar: { ...xr.ChaseFar, posOffset: [0, 0, 1.25] },
+          FirstPerson: {
+            ...xr.FirstPerson,
+            posOffset: [0, 0.64, 2.65],
+            hideVehicle: !0,
+          },
+          Bonnet: { ...xr.Bonnet, posOffset: [0, 0.28, 3.01] },
+        },
+      };
       const vehicleMap = {
           Roadster: vehicles.Roadster,
           Bike: vehicles.Bike,
           Coach: vehicles.Bus,
           Lambo: vehicles.Lambo,
           Supercar: vehicles.Supercar,
+          SportsCar: vehicles.SportsCar,
         },
         br = 1,
         fr = 2;
@@ -16966,6 +17003,16 @@
       };
       const Il = [2.23694, 3.59999],
         Dl = [1 / 1604, 0.001];
+      // GLB base colors are linear, not sRGB hex values.
+      function sportsMaterial(rgb, emissive = 0) {
+        const material = new r.F({
+          roughness: 0.903921569,
+          emissive,
+          emissiveIntensity: 0,
+        });
+        material.color.setRGB(...rgb);
+        return material;
+      }
       const Ml = new r.U(0, 1, 0),
         Nl = 2 * Math.PI,
         jl = 0.5,
@@ -16992,6 +17039,12 @@
           }),
           reverselight: new r.F({ color: 6710852, emissive: 16777096 }),
           headlight: new r.F({ color: 6710886, emissive: 16777181 }),
+          sportBody: sportsMaterial([0.548759, 0.548759, 0.548759]),
+          sportGlass: sportsMaterial([0.028173, 0.028173, 0.028173]),
+          sportTrim: sportsMaterial([0.125944, 0.125944, 0.125944]),
+          sportHead: sportsMaterial([0.64, 0.299566, 0.10198], 0xffedce),
+          sportTail: sportsMaterial([0.64, 0.073725, 0.058998], 0xff190c),
+          sportTyre: sportsMaterial([0.010728, 0.010728, 0.010728]),
           window: new r.E({ color: 6712183, specular: 2236962 }),
           shadow: new r.C({
             color: 0,
@@ -17229,11 +17282,13 @@
             this.hasInit && this.resetToNode(Ke.vehicleNode);
         }
         setLights(e) {
-          e
-            ? ((Cl.rearlight.emissiveIntensity = 0.5),
-              (Cl.headlight.emissiveIntensity = 0.5))
-            : ((Cl.rearlight.emissiveIntensity = 0),
-              (Cl.headlight.emissiveIntensity = 0));
+          Cl.rearlight.emissiveIntensity = Cl.headlight.emissiveIntensity = e ? 0.5 : 0;
+          Cl.sportHead.emissiveIntensity = e ? 0.9 : 0;
+          this.updateSportsTailLights();
+        }
+        updateSportsTailLights() {
+          // The GLB has one rear lens per side, shared by tail and brake lights.
+          Cl.sportTail.emissiveIntensity = z.braking ? 1.6 : z.headlights ? 0.45 : 0;
         }
         updateHeadlights() {
           let e = 3.25 - 2.5 * (re.intensity + he.intensity),
@@ -17258,43 +17313,46 @@
           let i = e.bodyObj,
             s = e.wheelObj;
           const a = new Xi.a();
+          this.vehicleLoad = a;
           let n = Cl;
           if (e.skins) {
             let t = Object.keys(e.skins)[0];
             for (let i in e.skins[t]) n[i].color.setHex(e.skins[t][i]);
           }
-          a.load(i.default, (e) => {
-            e.traverse((e) => {
-              if (e.isMesh) {
-                let t = Cl.default,
-                  i = e.name.split("_")[1];
-                i in Cl && (t = Cl[i]),
-                  (e.material = t),
-                  "shadow" == i && (e.castShadow = !0);
-              }
-            }),
-              this.positionHeadlights(),
-              this.updateHeadlights(),
-              (e.rotation.y = -Math.PI / 2),
-              z.geo.add(e);
-          }),
-            a.load(s.default, (t) => {
-              t.traverse((e) => {
-                if (e.isMesh) {
-                  let t = Cl.wheel,
-                    i = e.name.split("_")[1];
-                  i in Cl && (t = Cl[i]),
-                    (e.material = t),
-                    "shadow" == i && (e.castShadow = !0),
-                    (e.position.z -= z.wheels.tyreWidth);
-                }
-              }),
-                this.initWheels(t, z.bike),
-                this.setDriveMode(jr.value.mode),
-                this.audio.initForVehicle(e, this.inputs, this.wheels.children),
-                this.resetToNode(Ke.vehicleNode),
-                (this.update = this.updateStationed),
-                Yo.pause();
+          Promise.all([a.loadAsync(i.default), a.loadAsync(s.default)])
+            .then(([body, wheels]) => {
+              if (this.vehicleLoad !== a) return;
+              body.traverse(mesh => {
+                if (!mesh.isMesh) return;
+                const material = mesh.name.split("_")[1];
+                mesh.material = Cl[material] || Cl.default;
+                mesh.castShadow = !!e.individualWheels || material === "shadow";
+              });
+              const wheelModels = e.individualWheels
+                ? Object.fromEntries(["fl", "fr", "rl", "rr"].map(name => [name, new r.G()]))
+                : null;
+              const wheelMeshes = [];
+              wheels.traverse(mesh => {
+                if (!mesh.isMesh) return;
+                const [, material] = mesh.name.split("_");
+                mesh.material = Cl[material] || Cl.wheel;
+                mesh.castShadow = !!e.individualWheels || material === "shadow";
+                if (wheelModels) wheelMeshes.push(mesh);
+                else mesh.position.z -= z.wheels.tyreWidth;
+              });
+              for (const mesh of wheelMeshes) wheelModels[mesh.name.split("_")[0]].add(mesh);
+              this.positionHeadlights();
+              this.updateHeadlights();
+              body.rotation.y = -Math.PI / 2;
+              z.geo.add(body);
+              this.initWheels(wheels, z.bike, wheelModels);
+              this.setDriveMode(jr.value.mode);
+              this.audio.initForVehicle(e, this.inputs, this.wheels.children);
+              this.resetToNode(Ke.vehicleNode);
+              this.setLights(z.headlights);
+            })
+            .catch(error => {
+              if (this.vehicleLoad === a) console.error("Could not load vehicle", e.name, error);
             });
         }
         initLights() {
@@ -17328,7 +17386,7 @@
             this.updateVehicleNode(),
             (Ke.vehicleIndexDidChange = !0);
         }
-        initWheels(e, t = !1) {
+        initWheels(e, t = !1, models = null) {
           let i,
             s = this.vehicleDef.wheels;
           for (; this.wheels.children.length; )
@@ -17336,7 +17394,7 @@
               this.wheels.children[this.wheels.children.length - 1]
             );
           (this.wheelEulers.length = 0),
-            (i = e.clone()),
+            (i = models ? models.fl : e.clone()),
             this.prepWheelState(i, s),
             (i.i = 0),
             (i.name = "fl"),
@@ -17349,7 +17407,7 @@
             this.wheels.add(i),
             this.updateWheelWorldPos(i),
             i.pPos.copy(i.worldPos),
-            (i = e.clone()),
+            (i = models ? models.fr : e.clone()),
             this.prepWheelState(i, s),
             (i.i = 1),
             (i.front = !t),
@@ -17367,7 +17425,7 @@
             this.updateWheelWorldPos(i),
             i.pPos.copy(i.worldPos),
             t ||
-              ((i = e.clone()),
+              ((i = models ? models.rl : e.clone()),
               this.prepWheelState(i, s),
               (i.i = 2),
               (i.front = !1),
@@ -17379,7 +17437,7 @@
               this.wheels.add(i),
               this.updateWheelWorldPos(i),
               i.pPos.copy(i.worldPos),
-              (i = e.clone()),
+              (i = models ? models.rr : e.clone()),
               this.prepWheelState(i, s),
               (i.i = 3),
               (i.front = !1),
@@ -18407,6 +18465,7 @@
               this.getDriveState(e),
               this.inputDisabled || (input.scrollDelta = 0),
               (z.hasBoost = this.hasBoost));
+          if (this.vehicleDef.individualWheels) this.updateSportsTailLights();
         }
         resetToNode(e) {
           let t = e.a - e.next.da / 2;
@@ -18468,6 +18527,7 @@
             this.steerOrientation.copy(this.orientation),
             this.autoDriver.reset(),
             this.useMouse && (this.dom.mousePrompt.style.display = "block");
+          if (this.vehicleDef.individualWheels) this.updateSportsTailLights();
         }
         getDriveState(e) {
           this.inputs.accel > 0
@@ -20576,7 +20636,7 @@
                     {
                       selected: t == e,
                       icon: vehicleMap[t].icon,
-                      label: t.toLowerCase(),
+                      label: vehicleMap[t].name.toLowerCase(),
                       onMouseDown: () => jr.set("type", t),
                     },
                     "veh-type-" + t
