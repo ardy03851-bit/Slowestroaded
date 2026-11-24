@@ -13,6 +13,7 @@ export const vehicleCatalog = {
     axle: { x: 0.98, y: 0.469, rear: -3.96, front: -1.10, ground: -0.002 },
     headlight: [0.65, 1.16, -0.4], tail: [0.70, 0.61, -4.73],
     wheelMaterials: /^(wheel_|Material\.010|brakedisk|Material\.04[235])/i,
+    skipMaterials: /^bolt_metal/i,
     heads: /^(headlights|fog_lights)$/, tails: /^taillight_chrome$/, addRearLamps: true,
   },
   Supercar: {

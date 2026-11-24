@@ -80,6 +80,7 @@ export function attachControls(root, api) {
       api.command(code);
     });
     el.setAttribute("aria-label", description);
+    el.dataset.action = code;
     actions.append(el);
   }
   const panel = document.createElement("section");

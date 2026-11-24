@@ -19172,6 +19172,11 @@
           }
           onTickerState(e) {
             this.pauseDom.style.display = e ? "block" : "none";
+            const tools = document.getElementById("sr-tools");
+            if (!tools) return;
+            tools.dataset.paused = String(e);
+            const toggle = tools.querySelector('[data-action="KeyP"]');
+            if (toggle) toggle.textContent = e ? "Resume" : "Pause";
           }
           initRenderer(e = !0, t = !0) {
             (this.renderer = new r.V({

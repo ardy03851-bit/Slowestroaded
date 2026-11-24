@@ -75,6 +75,8 @@
 .sr-close { display: block; margin: 0 0 6px auto; }
 .sr-touch #game-main { overscroll-behavior: none; }
 .sr-touch #menu-bar, .sr-touch #control-prompt { display: none; }
+.sr-touch #game-paused { z-index: 15; }
+#sr-tools[data-paused="true"] .sr-pedal { opacity: 0.45; pointer-events: none; }
 .sr-touch .sr-actions {
   top: max(10px, env(safe-area-inset-top));
   bottom: auto;
@@ -92,7 +94,7 @@
   bottom: calc(14px + env(safe-area-inset-bottom));
   touch-action: none;
 }
-.sr-touch .sr-drive .sr-pedal { min-width: clamp(61px, 10vw, 95px); min-height: 58px; touch-action: none; user-select: none; -webkit-user-select: none; }
+#sr-tools[data-touch="true"] .sr-pedal { min-width: clamp(61px, 10vw, 95px); min-height: 58px; touch-action: none; user-select: none; -webkit-user-select: none; }
 .sr-touch .sr-drive .sr-pedal[data-key="KeyS"] { grid-column: 4; }
 .sr-touch .sr-drive .sr-pedal[data-key="KeyW"] { background: #34582ce8; }
 .sr-touch .sr-drive .sr-pedal.pressed { background: #dbf5ad; color: #162316; }

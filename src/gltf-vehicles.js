@@ -115,7 +115,7 @@ function build(scene, spec) {
   scene.traverse(mesh => {
     if (!mesh.isMesh || !mesh.visible || !mesh.geometry.attributes.position) return;
     const name = mesh.material.name ?? "";
-    if (name === "shadow" || spec.skipNodes?.test(mesh.name)) return;
+    if (name === "shadow" || spec.skipNodes?.test(mesh.name) || spec.skipMaterials?.test(name)) return;
     mesh.geometry.computeBoundingBox();
     const bounds = mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
     const center = bounds.getCenter(new Vector3());
