@@ -1,0 +1,20 @@
+{
+  "name": "slowestroaded",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:mods": "node tools/build-mods.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "three": "0.144.0"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "4.2.1",
+    "@gltf-transform/extensions": "4.2.1",
+    "@gltf-transform/functions": "4.2.1",
+    "esbuild": "0.25.12",
+    "meshoptimizer": "0.25.0",
+    "sharp": "0.34.5"
+  }
+}

@@ -111,6 +111,8 @@
           t >= 0 && this.listeners.splice(t, 1);
         }
       }
+      const mods = window.Slowroaded;
+      const touchPlay = mods.touchDevice();
       var d = new l(!0);
       var c = window.localStorage.getItem("isDev");
       var input = new (class {
@@ -295,7 +297,7 @@
           e
         );
       };
-      var A = g() && null === window.localStorage.getItem("force-allow-mobile");
+      var A = !window.WebGLRenderingContext && !window.WebGL2RenderingContext;
       class m {
         constructor(e) {
           if (((this.listeners = { any: [] }), (this.value = {}), e))
@@ -813,6 +815,7 @@
           return (
             (e.userData.isNight = { value: !1 }),
             (i) => {
+              mods.legacyWind(i);
               for (let s in t) i.uniforms[s] = e.userData[s];
               (i.uniforms.isNight = e.userData.isNight),
                 (i.vertexShader = i.vertexShader.replace(
@@ -3473,6 +3476,7 @@
           )),
           e
         ));
+      mods.relief(vi, Oe, name => F(i.p + "static/media/heights/" + name + ".png", 8));
       let Li = null,
         Ri = !1,
         Ti = 50;
@@ -7958,6 +7962,21 @@
         }
         postProcessCell() {
           if (0 == this.lod || this.forceTrees) {
+            // Break up long bare stretches with an occasional terrain-snapped
+            // birch. Use the native road-clearance and slope tests below.
+            if (!this.trees.length) {
+              const seed = (
+                Math.imul(this.coords.x, 374761393) ^
+                Math.imul(this.coords.z, 668265263)
+              ) >>> 0;
+              if (seed % 9 < 4) {
+                const x = 0.22 + ((seed >>> 10) % 57) / 100;
+                const y = 0.22 + ((seed >>> 19) % 57) / 100;
+                const road = qe(this.originPos.x + x * we, this.originPos.z + y * we, this.originNode, !1);
+                if (road.d > road.w + Se + Math.abs(road.da) + 5)
+                  this.trees.push({ position: [x, y], rotation: (seed % 62) / 10, type: seed % 8 });
+              }
+            }
             let e, t, i;
             for (let s of this.trees)
               (e = Math.floor(s.position[0] * this.res)),
@@ -8545,7 +8564,6 @@
         gn = ze + 1.25,
         An = new Cs(97),
         mn = new r.F({
-          map: F(null),
           side: r.k,
           flatShading: !0,
           emissiveIntensity: 0.01,
@@ -11998,10 +12016,10 @@
           topography: "normal",
           skin: "default",
           weatherIndex: 1,
-          viewLodIndex: 2,
+          viewLodIndex: touchPlay ? 1 : 2,
           detailLodIndex: 1,
-          antialias: !0,
-          renderScale: 2,
+          antialias: !touchPlay,
+          renderScale: touchPlay ? 1 : 2,
         };
       var dr = new (class extends m {
           constructor() {
@@ -12594,6 +12612,7 @@
         },
         br = 1,
         fr = 2;
+      mods.applyVehicleCatalog(vehicleMap);
       const yr = 0,
         Ir = 1,
         Dr = 2,
@@ -12608,6 +12627,7 @@
           super(), (this.value = defaultVehicleSettings), this.loadConfig();
         }
         set(e, t) {
+          if (e === "type" && !vehicleMap[t]) t = "Roadster";
           super.set(e, t), window.localStorage.setItem(Mr[e], t);
         }
         resetMemory() {
@@ -17024,7 +17044,7 @@
           black: new r.D({ color: 3355443 }),
           tire: new r.D({ color: 2236962 }),
           body: new r.F({ color: 16316664, roughness: 0.5 }),
-          map: new r.F({ color: 16777215, roughness: 0.5, map: F(null) }),
+          map: new r.F({ color: 16777215, roughness: 0.5 }),
           metal: new r.D({ color: 16777215 }),
           redlight: new r.F({
             color: 6702148,
@@ -17289,21 +17309,19 @@
         updateSportsTailLights() {
           // The GLB has one rear lens per side, shared by tail and brake lights.
           Cl.sportTail.emissiveIntensity = z.braking ? 1.6 : z.headlights ? 0.45 : 0;
+          this.modelLighting?.lights(z.headlights, z.braking, z.headlightIntensity);
         }
         updateHeadlights() {
           let e = 3.25 - 2.5 * (re.intensity + he.intensity),
             t = Math.max(0.25, e);
           z.setHeadlightIntensity(t);
+          if (this.modelLighting) this.updateSportsTailLights();
         }
         positionHeadlights() {}
         initVehicle(e) {
-          var t;
-          if (
-            (null === (t = this.vehicleDef) || void 0 === t
-              ? void 0
-              : t.name) == e.name
-          )
-            return;
+          if (this.vehicleDef === e) return;
+          this.modelLighting?.dispose();
+          this.modelLighting = null;
           for (this.update = this.updatePass; z.geo.children.length; )
             z.geo.remove(z.geo.children[z.geo.children.length - 1]);
           (this.vehicleDef = e),
@@ -17312,8 +17330,31 @@
             e.map && (Cl.map.map = F(e.map));
           let i = e.bodyObj,
             s = e.wheelObj;
+          const request = {};
+          this.vehicleLoad = request;
+          const finish = (body, wheels, wheelModels, classic = false) => {
+            this.updateHeadlights();
+            if (classic) body.rotation.y = -Math.PI / 2;
+            z.geo.add(body);
+            this.initWheels(wheels, z.bike, wheelModels);
+            this.setDriveMode(jr.value.mode);
+            this.audio.initForVehicle(e, this.inputs, this.wheels.children);
+            this.resetToNode(Ke.vehicleNode);
+            this.setLights(z.headlights);
+          };
+          if (e.gltf) {
+            mods.loadVehicle("./", e.gltf).then(model => {
+              if (this.vehicleLoad !== request) return model.dispose();
+              this.modelLighting = model;
+              finish(model.body, null, model.wheels);
+            }).catch(error => {
+              if (this.vehicleLoad !== request) return;
+              console.warn("Keeping the fallback model for", e.name, error);
+              this.initVehicle(e.fallback);
+            });
+            return;
+          }
           const a = new Xi.a();
-          this.vehicleLoad = a;
           let n = Cl;
           if (e.skins) {
             let t = Object.keys(e.skins)[0];
@@ -17321,7 +17362,7 @@
           }
           Promise.all([a.loadAsync(i.default), a.loadAsync(s.default)])
             .then(([body, wheels]) => {
-              if (this.vehicleLoad !== a) return;
+              if (this.vehicleLoad !== request) return;
               body.traverse(mesh => {
                 if (!mesh.isMesh) return;
                 const material = mesh.name.split("_")[1];
@@ -17341,18 +17382,10 @@
                 else mesh.position.z -= z.wheels.tyreWidth;
               });
               for (const mesh of wheelMeshes) wheelModels[mesh.name.split("_")[0]].add(mesh);
-              this.positionHeadlights();
-              this.updateHeadlights();
-              body.rotation.y = -Math.PI / 2;
-              z.geo.add(body);
-              this.initWheels(wheels, z.bike, wheelModels);
-              this.setDriveMode(jr.value.mode);
-              this.audio.initForVehicle(e, this.inputs, this.wheels.children);
-              this.resetToNode(Ke.vehicleNode);
-              this.setLights(z.headlights);
+              finish(body, wheels, wheelModels, true);
             })
             .catch(error => {
-              if (this.vehicleLoad === a) console.error("Could not load vehicle", e.name, error);
+              if (this.vehicleLoad === request) console.error("Could not load vehicle", e.name, error);
             });
         }
         initLights() {
@@ -18465,7 +18498,7 @@
               this.getDriveState(e),
               this.inputDisabled || (input.scrollDelta = 0),
               (z.hasBoost = this.hasBoost));
-          if (this.vehicleDef.individualWheels) this.updateSportsTailLights();
+          if (this.vehicleDef.individualWheels || this.modelLighting) this.updateSportsTailLights();
         }
         resetToNode(e) {
           let t = e.a - e.next.da / 2;
@@ -18527,7 +18560,7 @@
             this.steerOrientation.copy(this.orientation),
             this.autoDriver.reset(),
             this.useMouse && (this.dom.mousePrompt.style.display = "block");
-          if (this.vehicleDef.individualWheels) this.updateSportsTailLights();
+          if (this.vehicleDef.individualWheels || this.modelLighting) this.updateSportsTailLights();
         }
         getDriveState(e) {
           this.inputs.accel > 0
@@ -19055,11 +19088,13 @@
               : (this.initVehicle(),
                 window.addEventListener("keydown", this.onAudioInitBound),
                 window.addEventListener("mousedown", this.onAudioInitBound),
+                window.addEventListener("pointerdown", this.onAudioInitBound),
                 El.setStats(this.stats),
                 Yo.init(),
                 (this.initialised = !0)),
               this.camController.updateViewDist(),
               d.set(!1),
+              this.installModControls(),
               this.onLoadProgress(1),
               this.beginRender();
           }
@@ -19087,7 +19122,53 @@
           onAudioInit() {
             audio.init(),
               window.removeEventListener("keydown", this.onAudioInitBound),
+              window.removeEventListener("pointerdown", this.onAudioInitBound),
               window.removeEventListener("mousedown", this.onAudioInitBound);
+          }
+          installModControls() {
+            if (touchPlay && jr.value.input !== 0) jr.set("input", 0);
+            mods.attachControls(document.getElementById("sr-tools"), {
+              hold: (key, held) => {
+                if (held && (input.keysLocked || d.value || game.paused)) return false;
+                input.key[key] = held;
+                return true;
+              },
+              command: key => {
+                if (input.keysLocked || d.value) return;
+                if (!input.onKey(key)) input.key[key] = true;
+              },
+              vehicle: key => jr.set("type", key),
+              scene: key => dr.set("sceneName", key),
+              season: key => { dr.set("skin", key); dr.set("weatherIndex", 0); },
+              weather: key => dr.set("weatherIndex", Number(key)),
+              road: key => dr.set("topography", key),
+              quality: key => dr.set("renderScale", Number(key)),
+              options: () => {
+                const v = dr.value;
+                const meta = dr.sceneMeta.scenes[v.sceneName];
+                const skin = meta.skins.includes(v.skin) ? v.skin : meta.skins[0];
+                return {
+                  vehicles: Object.entries(vehicleMap).map(([key, model]) => [key, model.name]),
+                  vehicle: jr.value.type, scenes: [["Hills", "Hills"], ["Planet", "Offworld"]],
+                  scene: v.sceneName, seasons: Object.entries(meta.skinNames), season: skin,
+                  weathers: meta.skinWeathers[skin].map((name, index) => [String(index), name]),
+                  weather: String(v.weatherIndex), roads: meta.topography.map(x => [x, x]),
+                  road: v.topography, quality: String(v.renderScale),
+                };
+              },
+              importModel: async (file, type) => {
+                if (!/\.glb$/i.test(file.name)) throw new Error("Choose a .glb file");
+                if (type === "whiteBirch" || type === "stylizedBirch") {
+                  await this.birches.importTree(file, type);
+                  return "Tree loaded for this tab. Look for it in the Hills.";
+                }
+                const spec = await mods.importVehicle(file, mods.localPresets[type]);
+                mods.registerVehicle(vehicleMap, "Local_" + type, spec, vehicleMap.Roadster.fallback);
+                jr.set("type", "Local_" + type);
+                this.vehicleController.initVehicle(vehicleMap["Local_" + type]);
+                return `${spec.title} loaded for this tab.`;
+              },
+            });
           }
           onTickerState(e) {
             this.pauseDom.style.display = e ? "block" : "none";
@@ -19123,6 +19204,7 @@
               (this.renderer.shadowMap.enabled = !0),
               (this.lights.ambient = ne),
               this.scene.add(this.lights.ambient);
+            this.birches = new mods.BirchLayer(this.scene, touchPlay);
             let t = he;
             t.position.set(0, 1, 0),
               (this.lights.hemi = t),
@@ -19219,6 +19301,8 @@
                 (this.vehicleController.update(this.physDT), (this.physDT = 0)),
                 this.camController.update(e),
                 Do.update(e, t);
+              mods.wind.value = t;
+              this.birches.update(t, z.position, Va.activeInstances[0], dr.value.sceneName, dr.value.skin);
             } catch (Tc) {
               return (
                 console.error(Tc),
@@ -19454,20 +19538,7 @@
                 alt: "",
               }),
               Object(Ul.jsx)("br", {}),
-              "Apologies, this project is not yet supported on mobile devices as it requires a hardware keyboard.",
-              Object(Ul.jsx)("br", {}),
-              Object(Ul.jsx)("br", {}),
-              "If you're not on a mobile device, please disregard this message and click below to force a reload.",
-              Object(Ul.jsx)("br", {}),
-              Object(Ul.jsx)("br", {}),
-              Object(Ul.jsx)("div", {
-                className: "splash-reload",
-                onMouseDown: () => {
-                  window.localStorage.setItem("force-allow-mobile", !0),
-                    window.location.reload();
-                },
-                children: "I have a keyboard",
-              }),
+              "This browser doesn’t expose WebGL. Enable hardware acceleration or try a browser with WebGL support.",
             ],
           });
       var ed = ({
@@ -22064,6 +22135,7 @@
                     Object(Ul.jsx)(jc, {}),
                     Object(Ul.jsx)(dc, { toggleSplash: x }),
                     Object(Ul.jsx)(ld, {}),
+                    Object(Ul.jsx)("div", { id: "sr-tools" }),
                     w
                       ? Object(Ul.jsx)(Nc, { loadProgress: o })
                       : Object(Ul.jsx)(gc, {}),
