@@ -1,10 +1,10 @@
 import {
-  Box3, Color, CylinderGeometry, Group, IcosahedronGeometry, InstancedMesh,
+  Box3, BufferGeometry, Color, CylinderGeometry, DoubleSide, Float32BufferAttribute, Group, InstancedMesh,
   Matrix4, MeshStandardMaterial, Quaternion, Vector3,
 } from "three";
 import { mergeBufferGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { wind } from "./graphics.js";
+import { applyWind } from "./graphics.js";
 
 const up = new Vector3(0, 1, 0);
 const bark = 0xbfc2b1;
@@ -20,7 +20,8 @@ function limb(a, b, bottom, tip) {
     new Quaternion().setFromUnitVectors(up, direction.clone().normalize()),
     new Vector3(1, 1, 1)
   );
-  return new CylinderGeometry(tip, bottom, direction.length(), 6, 1).applyMatrix4(m);
+  const trunk = bottom > .07;
+  return new CylinderGeometry(tip, bottom, direction.length(), trunk ? 7 : 4, 1, !trunk).applyMatrix4(m);
 }
 
 function combine(parts) {
@@ -44,64 +45,117 @@ function procedural() {
   const mid = new Vector3(0.16, 4.15, -0.08);
   const tip = new Vector3(-0.34, 7.55, 0.17);
   const branches = [limb(root, mid, 0.16, 0.096), limb(mid, tip, 0.096, 0.024)];
-  const leaves = [[], [], []];
-  for (let i = 0; i < 14; i++) {
-    const h = 2.5 + i * 0.34;
+  const leaves = [], colors = [], anchors = [];
+  const palette = [0x768d44, 0x558044, 0xa0ac61, 0x769750].map(hex => new Color(hex));
+  const u = new Vector3(), v = new Vector3(), w = new Vector3();
+  const profile = [[0,-1],[-.84,-.20],[-.58,.59],[0,1],[.58,.59],[.84,-.20]];
+  for (let i = 0; i < 19; i++) {
+    const h = 2.37 + i * .265;
     const base = h < 4.15 ? root.clone().lerp(mid, h / 4.15) : mid.clone().lerp(tip, (h - 4.15) / 3.4);
     const angle = i * 2.4 + random() * 0.27;
-    const spread = (1.96 - i * 0.085) * (0.82 + random() * 0.22);
+    const spread = (2.2 - i * 0.084) * (0.77 + random() * 0.32);
     const end = base.clone().add(new Vector3(Math.cos(angle) * spread, 0.85, Math.sin(angle) * spread));
     branches.push(limb(base, end, 0.047 - i * 0.002, 0.008));
-    for (let j = 0; j < 3; j++) {
-      const leaf = new IcosahedronGeometry(1, 1);
-      const size = (0.56 + random() * 0.28) * (1 - i * 0.024);
-      const pt = base.clone().lerp(end, 0.62 + j * 0.18);
-      leaf.scale(size * 1.5, size * 0.8, size);
-      leaf.rotateY(angle + j * 0.6);
-      leaf.translate(pt.x, pt.y + 0.18 + random() * 0.25, pt.z);
-      leaves[j].push(leaf);
+    for (let j = 0; j < 5; j++) {
+      const fork = base.clone().lerp(end, .45 + j * .132);
+      const forkAngle = angle + (j % 2 ? -.94 : 1.18);
+      const l = (.70 - j * .056) * (1 - i * .025);
+      const twig = fork.clone().add(new Vector3(Math.cos(forkAngle)*l, .49 + .14 * random(), Math.sin(forkAngle)*l));
+      branches.push(limb(fork, twig, .011 - i*.00027, .0026));
+      for (let k = 0; k < 10; k++) {
+        const center = fork.clone().lerp(twig, .19 + random() * 1.05);
+        center.add(new Vector3((random()-.5)*.85, (random()-.35)*.63, (random()-.5)*.85));
+        const a = random() * Math.PI * 2, length = .095 + .125 * random();
+        const span = length * (.61 + .28 * random());
+        u.set(Math.cos(a), .38 * (random()-.5), Math.sin(a)).normalize();
+        v.set(-Math.sin(a), (random()-.42)*2.1, Math.cos(a)).normalize();
+        w.crossVectors(u, v).normalize();
+        const color = palette[Math.floor(random()*palette.length)];
+        function vertex(p, q, fold) {
+          leaves.push(center.x + u.x*p*span + v.x*q*length + w.x*fold,
+            center.y + u.y*p*span + v.y*q*length + w.y*fold,
+            center.z + u.z*p*span + v.z*q*length + w.z*fold);
+          anchors.push(center.x, center.y, center.z);
+          colors.push(color.r, color.g, color.b);
+        }
+        for (let k = 1; k < profile.length - 1; k++) {
+          vertex(...profile[0], .011);
+          vertex(...profile[k], k === 3 ? .02 : 0);
+          vertex(...profile[k+1], k === 2 ? .02 : 0);
+        }
+      }
     }
   }
+  const canopy = new BufferGeometry();
+  canopy.setAttribute("position", new Float32BufferAttribute(leaves, 3));
+  canopy.setAttribute("color", new Float32BufferAttribute(colors, 3));
+  canopy.setAttribute("srLeaf", new Float32BufferAttribute(anchors, 3));
+  canopy.computeVertexNormals();
   return [
     { geometry: combine(branches), material: new MeshStandardMaterial({ color: bark, roughness: 0.94 }), leaves: false, bark: true },
-    ...leaves.map((group, i) => ({
-      geometry: combine(group),
-      material: new MeshStandardMaterial({ color: [0x739d40, 0x537f37, 0x8ea853][i], roughness: 0.82, flatShading: true }),
-      leaves: true, tint: i,
-    })),
+    { geometry: canopy, material: new MeshStandardMaterial({ color: 0xffffff, vertexColors: true, side: DoubleSide,
+      roughness: .83, emissive: 0x1e290d, emissiveIntensity: .13 }), leaves: true, pivot: true },
   ];
 }
 
 function animate(part) {
-  const { material, leaves, bark } = part;
+  const { material, leaves, bark, pivot } = part;
   material.onBeforeCompile = shader => {
-    shader.uniforms.srWind = wind;
+    applyWind(shader);
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nuniform float srWind;\nvarying vec3 srBirchLocal;")
+      .replace("#include <common>", `#include <common>\nvarying vec3 srBirchLocal;\n${pivot ? "attribute vec3 srLeaf;" : ""}`)
       .replace("#include <begin_vertex>", `
         #include <begin_vertex>
         srBirchLocal = position;
         vec3 root = (modelMatrix * instanceMatrix[3]).xyz;
-        float a = smoothstep(0.0, 8.0, position.y);
-        float phase = dot(root.xz, vec2(0.046, 0.077));
-        transformed.xz += a*a * (0.26 * sin(srWind * 1.7 + phase)
-          + 0.08 * sin(srWind * 3.15 + phase * 2.0)) * vec2(0.85, 0.32);
+        vec3 anchor = ${pivot ? "srLeaf" : "position"};
+        float a = clamp(anchor.y / 7.55, 0.0, 1.0);
+        transformed.xz += srLocalWind(root, a) * .76;
         ${leaves ? `
-          float flutter = sin(srWind * 6.5 + phase + dot(position, vec3(1.9, 2.7, 3.4)));
-          transformed.xz += 0.10 * a * flutter * vec2(0.65, -0.9);
-          transformed.y += 0.034 * a * flutter;
+          float flutter = sin(srWind * 7.1 + dot(root.xz,vec2(.22,.36)) + dot(anchor,vec3(6.5,2.7,5.1)));
+          transformed.xz += .052 * a * flutter * vec2(.65,-.9);
+          transformed.y += .022 * a * flutter;
+          ${pivot ? "transformed.y += (position.x-anchor.x+position.z-anchor.z)*flutter*.54*srWindStrength;" : ""}
         ` : ""}
       `);
     if (bark) shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", "#include <common>\nvarying vec3 srBirchLocal;")
       .replace("#include <color_fragment>", `
         #include <color_fragment>
-        float stripe = sin(srBirchLocal.y * 35.0 + sin(srBirchLocal.z * 14.0) * 2.0);
+        float stripe = sin(srBirchLocal.y * 39.0 + sin(srBirchLocal.z * 23.0) * 2.0);
         float spots = sin(srBirchLocal.x * 24.0 + srBirchLocal.z * 18.0 + srBirchLocal.y * 11.0);
         diffuseColor.rgb *= mix(1.0, 0.27, smoothstep(0.71, 0.94, stripe) * smoothstep(-0.33, 0.49, spots));
       `);
   };
-  material.customProgramCacheKey = () => `srBirch-${Number(leaves)}-${Number(!!bark)}`;
+  material.customProgramCacheKey = () => `srBirch-${Number(leaves)}-${Number(!!bark)}-${Number(!!pivot)}`;
+}
+
+export function roadsideTrees(node, heightAt, clearAt, lowPower) {
+  const out = [];
+  if (!node) return out;
+  let start = node;
+  for (let i = 0; i < 4 && start.prev; i++) start = start.prev;
+  for (let i = 0, n = start; n && i < (lowPower ? 11 : 16); n = n.next, i++) {
+    if (!n.n || !n.next || !Number.isFinite(n.i)) continue;
+    const rand = seeded(Math.imul(n.i + 131, 387421));
+    for (const side of [-1, 1]) {
+      if ((n.i + (side < 0 ? 0 : 2)) % 3 === 1) continue;
+      const setback = 9.5 + rand() * 15;
+      const advance = rand() * 4.5 - 2.2;
+      const x = n.p.x + n.n.x * side * setback - n.n.z * advance;
+      const z = n.p.z + n.n.z * side * setback + n.n.x * advance;
+      if (!clearAt(x, z, n)) continue;
+      const y = heightAt(x,z);
+      if (!Number.isFinite(y) || y < 1.1 || Math.abs(y - n.p.y) > 11 ||
+          Math.abs(heightAt(x+1,z) - y) > .64 || Math.abs(heightAt(x,z+1) - y) > .64) continue;
+      const scale = .74 + rand()*.51;
+      const matrix = new Matrix4().makeRotationY(rand() * Math.PI * 2).scale(
+        new Vector3(scale * (.86 + rand()*.24), scale, scale * (.88 + rand()*.24)));
+      matrix.setPosition(x, y-.11, z);
+      out.push(matrix);
+    }
+  }
+  return out;
 }
 
 export class BirchLayer {
@@ -109,8 +163,8 @@ export class BirchLayer {
     this.container = new Group();
     this.container.name = "Animated 3D birches";
     scene.add(this.container);
-    this.limit = lowPower ? 12 : 28;
-    this.range = lowPower ? 39 : 64;
+    this.limit = lowPower ? 16 : 34;
+    this.range = lowPower ? 62 : 91;
     this.current = [];
     this.lastTime = -1;
     this.install(procedural());
@@ -139,7 +193,7 @@ export class BirchLayer {
     }
     this.current.length = 0;
   }
-  update(time, location, groups, sceneName, season) {
+  update(time, location, groups, sceneName, season, supplemental = () => []) {
     if (time >= this.lastTime && time - this.lastTime < 0.24) return;
     this.lastTime = time;
     this.restore();
@@ -155,26 +209,36 @@ export class BirchLayer {
         const d = position.distanceToSquared(location);
         // Preserve the established mixed woodland and keep 3D vegetation near the road.
         const pattern = Math.abs(Math.floor(position.x * 17 + position.z * 23));
-        if (d > this.range * this.range || (pattern % 4 !== 0 && d > 25 * 25)) continue;
+        if (d > this.range * this.range || (pattern % 3 !== 0 && d > 27 * 27)) continue;
         candidates.push({ mesh, index, matrix: world.clone(), d });
       }
+    }
+    if (sceneName === "Hills") for (const matrix of supplemental()) {
+      position.setFromMatrixPosition(matrix);
+      const d = position.distanceToSquared(location);
+      if (d > this.range * this.range || candidates.some(other => {
+        const m = other.matrix.elements;
+        return (m[12]-position.x)**2 + (m[14]-position.z)**2 < 19;
+      })) continue;
+      candidates.push({ matrix, d });
     }
     candidates.sort((a, b) => a.d - b.d);
     const selected = candidates.slice(0, this.limit);
     for (const [index, candidate] of selected.entries()) {
       const { mesh, index: source } = candidate;
-      this.current.push({ mesh, index: source, value: mesh.instanceVariant.array[source] });
-      mesh.instanceVariant.array[source] = -10;
-      mesh.instanceVariant.needsUpdate = true;
+      if (mesh) {
+        this.current.push({ mesh, index: source, value: mesh.instanceVariant.array[source] });
+        mesh.instanceVariant.array[source] = -10;
+        mesh.instanceVariant.needsUpdate = true;
+      }
       for (const tree of this.container.children) tree.setMatrixAt(index, candidate.matrix);
     }
     for (const [i, mesh] of this.container.children.entries()) {
       mesh.count = selected.length;
       mesh.instanceMatrix.needsUpdate = true;
       const part = this.parts[i];
-      if (part.tint !== undefined) {
-        mesh.material.color.set((season === "autumn" ? [0xd79d3e, 0xb1762f, 0xd7b34c] : [0x739d40, 0x537f37, 0x8ea853])[part.tint]);
-      }
+      mesh.visible = !part.leaves || season !== "winter";
+      if (part.pivot) mesh.material.color.set(season === "autumn" ? 0xffb34d : 0xffffff);
     }
   }
   async importTree(file, preset) {

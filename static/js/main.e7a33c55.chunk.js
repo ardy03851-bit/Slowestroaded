@@ -1102,6 +1102,7 @@
           )),
           e
         ));
+      mods.atmosphere(Pe, re);
       const Ge = new r.H(ce, 1, 0.25, ue);
       Ge.fwd = new r.U(0, 0, 1);
       var Be = Ge;
@@ -3476,7 +3477,7 @@
           )),
           e
         ));
-      mods.relief(vi, Oe, name => F(i.p + "static/media/heights/" + name + ".png", 8));
+      mods.relief(vi, Oe, name => F(i.p + "static/media/surfaces/" + name, touchPlay ? 4 : 12));
       let Li = null,
         Ri = !1,
         Ti = 50;
@@ -12338,6 +12339,7 @@
           Bus: {
             enabled: !0,
             name: "Coach",
+            doors: true,
             skins: [],
             bodyObj: i(38),
             wheelObj: i(39),
@@ -17369,6 +17371,7 @@
                 mesh.material = Cl[material] || Cl.default;
                 mesh.castShadow = !!e.individualWheels || material === "shadow";
               });
+              if (e.doors) mods.coachDoors(body);
               const wheelModels = e.individualWheels
                 ? Object.fromEntries(["fl", "fr", "rl", "rr"].map(name => [name, new r.G()]))
                 : null;
@@ -19209,6 +19212,7 @@
               (this.renderer.shadowMap.enabled = !0),
               (this.lights.ambient = ne),
               this.scene.add(this.lights.ambient);
+            mods.softShadows(this.renderer);
             this.birches = new mods.BirchLayer(this.scene, touchPlay);
             let t = he;
             t.position.set(0, 1, 0),
@@ -19218,10 +19222,11 @@
             i.position.set(0, 10, 0),
               (i.castShadow = !0),
               (i.shadow.radius = 2),
-              (i.shadow.camera.left = -4),
-              (i.shadow.camera.right = 4),
-              (i.shadow.camera.top = 4),
-              (i.shadow.camera.bottom = -4),
+              (i.shadow.normalBias = 0.028),
+              (i.shadow.camera.left = -7),
+              (i.shadow.camera.right = 7),
+              (i.shadow.camera.top = 8),
+              (i.shadow.camera.bottom = -8),
               i.shadow.camera.updateProjectionMatrix();
             let s = 512 * (dr.value.detailLodIndex + 1);
             (i.shadow.mapSize.width = s),
@@ -19307,7 +19312,15 @@
                 this.camController.update(e),
                 Do.update(e, t);
               mods.wind.value = t;
-              this.birches.update(t, z.position, Va.activeInstances[0], dr.value.sceneName, dr.value.skin);
+              const { sceneName, skin, weatherIndex } = dr.value;
+              const skies = dr.sceneMeta.scenes[sceneName].skinWeathers;
+              mods.climate(sceneName, skin, (skies[skin] || Object.values(skies)[0])[weatherIndex], e);
+              this.birches.update(t, z.position, Va.activeInstances[0], sceneName, skin,
+                () => mods.roadsideTrees(Ke.vehicleNode, (x, z) => Do.getNearGridHeightAt(x, z),
+                  (x, z, node) => {
+                    const road = qe(x, z, node, !0);
+                    return road.d > road.w + Math.abs(road.da) + 3.4;
+                  }, touchPlay));
             } catch (Tc) {
               return (
                 console.error(Tc),

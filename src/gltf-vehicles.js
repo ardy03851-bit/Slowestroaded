@@ -3,6 +3,7 @@ import {
   Mesh, MeshStandardMaterial, sRGBEncoding, Vector3,
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 import { vehicleCatalog, vehicleOptions } from "./vehicle-catalog.js";
 
 const loader = new GLTFLoader();
@@ -10,9 +11,11 @@ const files = new Map();
 const sides = ["fl", "fr", "rl", "rr"];
 const positive = name => name.endsWith("l");
 let studio;
+let countryside;
+const reflective = new Set();
 
 function reflectionMap() {
-  if (studio) return studio;
+  if (studio) return countryside ?? studio;
   const canvas = document.createElement("canvas");
   canvas.width = 128; canvas.height = 64;
   const ctx = canvas.getContext("2d");
@@ -27,6 +30,14 @@ function reflectionMap() {
   studio = new CanvasTexture(canvas);
   studio.mapping = EquirectangularReflectionMapping;
   studio.encoding = sRGBEncoding;
+  new RGBELoader().load("./static/media/surfaces/country-road.hdr", texture => {
+    texture.mapping = EquirectangularReflectionMapping;
+    countryside = texture;
+    for (const material of reflective) {
+      material.envMap = texture;
+      material.needsUpdate = true;
+    }
+  }, undefined, () => {}); // Procedural sky remains available when the HDRI cannot load.
   return studio;
 }
 
@@ -34,6 +45,7 @@ function configureMaterial(material) {
   if (!material.isMeshStandardMaterial) return material;
   material.envMap = reflectionMap();
   material.envMapIntensity = 0.3;
+  reflective.add(material);
   if (material.transmission > 0) {
     // Rendering a transmission pass for every pane is expensive on iPad.
     material.transmission = 0;
@@ -161,7 +173,7 @@ function build(scene, spec) {
       }
     },
     dispose() {
-      for (const mat of surfaces.values()) mat.dispose();
+      for (const mat of surfaces.values()) { reflective.delete(mat); mat.dispose(); }
       if (rearGeometry) {
         body.children.at(-1).material.dispose();
         rearGeometry.dispose();

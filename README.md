@@ -1,6 +1,6 @@
 # Slowroaded
 
-A static Slow Roads mod with a GLB vehicle catalog, PBR vehicle materials, asphalt and terrain bump detail, animated vegetation, and a touch driving layout. The original game bundle still owns terrain streaming, physics, cameras, audio, and save state; new features live in `src/`.
+A static Slow Roads mod with a GLB vehicle catalog, PBR vehicle materials and scanned terrain surfaces, animated roadside woodland, and a touch driving layout. The original game bundle still owns terrain streaming, physics, cameras, audio, and save state; new features live in `src/`.
 
 ## Play
 
@@ -26,10 +26,14 @@ Run the site through a local HTTP server, not `file://`. GitHub Pages serves the
 3. Edit `src/vehicle-catalog.js`. To replace a vehicle, keep its catalog key. For a new entry, use a new key and set `base` to a supported vehicle key such as `Roadster` to inherit its driving behavior and OBJ fallback. Set `axle`, `scale`, light positions, and the node/material patterns for your model. Coordinates are measured in the original file before applying the scale. `axle.x` is half the track; `axle.y` is wheel-center height.
 4. Build, run the tests, and check the model from the chase and side views. Verify grounding, all four wheels, steering, night lighting, brake emission, and car switching. If the GLB fails, the inherited OBJ remains driveable.
 
-`src/graphics.js` adds height-based surface relief without changing collision geometry. Run `node tools/bake-heightmaps.mjs` to regenerate the two grayscale maps. `src/birches.js` handles near-tree placement, instancing, and layered wind. Keep the near-tree budget low when adding dense assets.
+`src/graphics.js` blends scanned albedo, tangent normals, roughness, and height into the world-space terrain and road materials. Winter keeps its snow colors, rain darkens pavement and reduces its roughness, and fine detail fades at a distance. To repack the maps, put the ambientCG 1K JPG ZIPs in one folder and run `node tools/pack-surfaces.mjs <folder>`. The packed RGBA maps hold normal X/Y, roughness, and height in that order.
+
+`src/birches.js` combines the original woodland placement with terrain-checked roadside trees independent of the billboard pool. The wind shader shares travelling gusts between grass, brush and trees; near leaves also bend around their own pivots. In winter the roadside birches are bare, and Offworld remains treeless. `src/coach.js` fits the door geometry to the original Coach shell without changing its handling.
 
 ## Asset credits and distribution
 
+- **Scanned surfaces:** ambientCG [Grass 004](https://ambientcg.com/view?id=Grass004), [Ground 024](https://ambientcg.com/view?id=Ground024), and [Asphalt 002](https://ambientcg.com/view?id=Asphalt002), [CC0](https://docs.ambientcg.com/license/). The repository includes resized and channel-packed maps.
+- **Vehicle reflections:** [Rural Asphalt Road](https://polyhaven.com/a/rural_asphalt_road) by Poly Haven, CC0.
 - **Concept 006, 025 and 033:** [Concept 006](https://sketchfab.com/3d-models/free-concept-car-006-public-domain-cc0-a4e19bb6e6394c4a95d4319ef7d265ba), [Concept 025](https://sketchfab.com/3d-models/free-concept-car-025-public-domain-cc0-e3a65443d3e44c33b594cec591c01c05), and [Concept 033](https://sketchfab.com/3d-models/free-concept-car-033-public-domain-cc0-58f9d30f8e734de8ba05fa64e0e6584a) are offered under CC0 in their creator descriptions. The repository contains optimized copies. The public birches are generated in code.
 - **Sports Car:** [Quaternius, via Poly Pizza](https://poly.pizza/m/1mkmFkAz5v), CC0.
 - **Local-only presets:** [Camaro](https://sketchfab.com/3d-models/chevrolet-camaro-car-freee-0daac42293c6425682e98df2bf525108), [White Birch](https://sketchfab.com/3d-models/white-birch-de573241a1ba421889fb70c7bdd85ec3), and [Stylized Birch](https://sketchfab.com/3d-models/stylized-birch-tree-game-ready-low-poly-439ed34f4e604759965f5524126240fc) carry [Sketchfab distribution terms](https://sketchfab.com/licenses). The supplied [Teorema](https://sketchfab.com/3d-models/2021-pininfarina-teorema-concept-5e2ccdc012224de2bdb5f857b923fb01) embeds CC BY-NC-SA terms. None of these four original files is served by this repository.
